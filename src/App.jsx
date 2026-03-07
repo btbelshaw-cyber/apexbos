@@ -501,7 +501,7 @@ function EstimatingAgent({ onEstimateComplete, existingProject }) {
       const { value: docText } = await mammoth.extractRawText({ arrayBuffer });
 
       // Send to Claude to convert to YAML input pack
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/anthropic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1185,7 +1185,7 @@ Exclusions: ${p.exclusions?.join("; ")}`;
       } else {
         messages = [{ role: "user", content: `Scan this NZ construction contract. User role: ${userRole}.\n\nCONTRACT:\n\n${fileData.data}\n\nReturn JSON as instructed.` }];
       }
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/anthropic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4000, system: CONTRACT_SYSTEM_PROMPT(estimateCtx), messages }),
