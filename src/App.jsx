@@ -484,6 +484,65 @@ function EstimatingAgent({ onEstimateComplete, existingProject }) {
   const [currentStage, setCurrentStage] = useState(-1);
   const [stageLog, setStageLog] = useState([]);
   const [result, setResult] = useState(null);
+  const [docxFileName, setDocxFileName] = useState("");
+  const [docxDragging, setDocxDragging] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState("");
+  const docxInputRef = useRef(null);
+
+  async function handleDocxUpload(file) {
+    setExtractError("");
+    setDocxFileName(file.name);
+    setExtracting(true);
+    try {
+      // Read docx as arraybuffer and extract text via mammoth
+      const mammoth = await import("mammoth");
+      const arrayBuffer = await file.arrayBuffer();
+      const { value: docText } = await mammoth.extractRawText({ arrayBuffer });
+
+      // Send to Claude to convert to YAML input pack
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          system: `You are a NZ quantity surveyor assistant. Convert the provided quantity takeoff / schedule document into a YAML input pack for the APEXBOS Estimating Agent.
+
+Output ONLY valid YAML — no explanation, no markdown fences, no preamble.
+
+The YAML must follow this exact structure:
+project_name: "string"
+project_type: "residential|commercial|civil|fitout|industrial"
+location: "city, NZ"
+floor_area_m2: number
+estimate_stage: "Concept|Preliminary|Developed Design|Consent|Tender|Construction"
+quality_level: "budget|standard|premium|luxury"
+region: "Auckland|Wellington|Christchurch|Queenstown|Dunedin|Hamilton|Tauranga|Napier|Nelson|Palmerston North"
+quantities:
+  - description: "item description"
+    quantity: number
+    unit: "m2|m3|lm|nr|t|kg|ls"
+assumptions:
+  - "assumption text"
+exclusions:
+  - "exclusion text"
+risks:
+  - "risk text"
+
+Extract all quantity items from the document. Where quantities are not explicitly stated, use reasonable NZ construction estimates based on the floor area and project type. Map elements to the closest matching description.`,
+          messages: [{ role: "user", content: `Convert this quantity schedule to YAML:\n\n${docText}` }]
+        })
+      });
+      const data = await response.json();
+      const yaml = data.content?.map(b => b.text || "").join("").trim();
+      setInputText(yaml);
+    } catch (err) {
+      setExtractError("Could not read document: " + err.message);
+      setDocxFileName("");
+    }
+    setExtracting(false);
+  }
 
   const OUTPUT_TYPES = [
     { id: "preliminary", label: "Preliminary Estimate",    desc: "Cost by category" },
@@ -613,8 +672,44 @@ function EstimatingAgent({ onEstimateComplete, existingProject }) {
       {tab === "input" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 260px", gap: 20, maxWidth: 1050 }}>
           <div>
-            <div style={{ fontSize: 9, letterSpacing: 3, color: "#5a6070", marginBottom: 8 }}>INPUT PACK — YAML</div>
-            <textarea value={inputText} onChange={e => setInputText(e.target.value)} rows={34} style={{ width: "100%", background: "#090c10", border: "1px solid #1e2530", color: "#a8c4a0", padding: 14, fontSize: 11.5, lineHeight: 1.75, fontFamily: "'DM Mono',monospace", outline: "none" }} />
+            {/* ── DOCX UPLOAD ZONE ── */}
+            <div style={{ fontSize: 9, letterSpacing: 3, color: "#5a6070", marginBottom: 8 }}>UPLOAD APEXBOS QUANTITY SCHEDULE</div>
+            <div
+              onDrop={e => { e.preventDefault(); setDocxDragging(false); const f = e.dataTransfer.files[0]; if (f) handleDocxUpload(f); }}
+              onDragOver={e => { e.preventDefault(); setDocxDragging(true); }}
+              onDragLeave={() => setDocxDragging(false)}
+              onClick={() => docxInputRef.current?.click()}
+              style={{ border: `2px dashed ${docxDragging ? GOLD : "#1e2a3a"}`, padding: "28px 24px", textAlign: "center", cursor: "pointer", background: docxDragging ? "#0d1520" : "#090c10", marginBottom: 14, transition: "all 0.2s", position: "relative" }}>
+              {extracting ? (
+                <div>
+                  <div style={{ fontSize: 11, color: GOLD, marginBottom: 6 }}>Reading document...</div>
+                  <div style={{ fontSize: 10, color: "#5a6070" }}>Claude is extracting quantities from your schedule</div>
+                  <div style={{ height: 2, background: "#1a2030", borderRadius: 2, overflow: "hidden", marginTop: 14, maxWidth: 280, margin: "14px auto 0" }}>
+                    <div style={{ height: "100%", background: GOLD, width: "60%", animation: "scan 1.2s ease-in-out infinite alternate" }} />
+                  </div>
+                </div>
+              ) : docxFileName ? (
+                <div>
+                  <div style={{ fontSize: 12, color: "#5aaa6a", marginBottom: 4 }}>✓ {docxFileName}</div>
+                  <div style={{ fontSize: 10, color: "#3a5030" }}>Quantities extracted — review below then run estimate</div>
+                  <div style={{ fontSize: 9, color: "#2a3040", marginTop: 8, cursor: "pointer" }} onClick={e => { e.stopPropagation(); setDocxFileName(""); setInputText(SAMPLE_INPUT); }}>× Clear and use manual input</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 22, marginBottom: 8, opacity: 0.3 }}>📄</div>
+                  <div style={{ fontSize: 12, color: "#8a90a0", marginBottom: 4 }}>Drop your APEXBOS Quantity Schedule here</div>
+                  <div style={{ fontSize: 9, color: "#3a4050", letterSpacing: 2 }}>DOCX files from apexbos.cloud/app.html</div>
+                </div>
+              )}
+              <input ref={docxInputRef} type="file" accept=".docx,.doc" onChange={e => e.target.files[0] && handleDocxUpload(e.target.files[0])} style={{ display: "none" }} />
+            </div>
+            {extractError && <div style={{ padding: "8px 12px", border: "1px solid #603030", color: "#e07070", fontSize: 10, marginBottom: 10 }}>⚠ {extractError}</div>}
+
+            {/* ── YAML PREVIEW / MANUAL INPUT ── */}
+            <div style={{ fontSize: 9, letterSpacing: 3, color: "#5a6070", marginBottom: 8 }}>
+              {docxFileName ? "EXTRACTED INPUT — REVIEW & EDIT" : "OR ENTER MANUALLY — YAML"}
+            </div>
+            <textarea value={inputText} onChange={e => setInputText(e.target.value)} rows={28} style={{ width: "100%", background: "#090c10", border: `1px solid ${docxFileName ? "#2a4030" : "#1e2530"}`, color: "#a8c4a0", padding: 14, fontSize: 11.5, lineHeight: 1.75, fontFamily: "'DM Mono',monospace", outline: "none" }} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ border: "1px solid #1e2530", padding: 14 }}>
@@ -630,7 +725,7 @@ function EstimatingAgent({ onEstimateComplete, existingProject }) {
                 <span style={{ fontSize: 10, color: "#5a6070" }}>Include GST (15%)</span>
               </div>
             </div>
-            <button className="btn" onClick={runEstimate} disabled={running} style={{ background: "#1e2530", color: GOLD, padding: 14, fontSize: 10, letterSpacing: 4, border: `1px solid ${GOLD}`, opacity: running ? 0.5 : 1, cursor: running ? "not-allowed" : "pointer" }}>
+            <button className="btn" onClick={runEstimate} disabled={running || extracting} style={{ background: "#1e2530", color: GOLD, padding: 14, fontSize: 10, letterSpacing: 4, border: `1px solid ${GOLD}`, opacity: (running || extracting) ? 0.5 : 1, cursor: (running || extracting) ? "not-allowed" : "pointer" }}>
               {running ? "PROCESSING..." : "▶  RUN ESTIMATE"}
             </button>
           </div>
