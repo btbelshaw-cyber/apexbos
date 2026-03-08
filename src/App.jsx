@@ -496,7 +496,7 @@ function EstimatingAgent({ onEstimateComplete, existingProject }) {
   const [currentStage, setCurrentStage] = useState(-1);
   const [stageLog, setStageLog] = useState([]);
   const [result, setResult] = useState(null);
-  const [docxFileName, setDocxFileName] = useState("");
+  const [docxFileName, setDocxFileName] = useState(SAMPLE_INPUT;
   const [docxDragging, setDocxDragging] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState("");
