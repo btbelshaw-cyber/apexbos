@@ -159,26 +159,38 @@ function groupBy(items, key) {
 }
 
 function parseInput(raw) {
-  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+  if (!raw || !raw.trim()) return { meta: {}, quantities: [], assumptions: [], exclusions: [], risks: [] };
+  const lines = raw.split("\n").map(l => l.trimEnd()).filter(l => l.trim());
   const meta = {}, quantities = [], assumptions = [], exclusions = [], risks = [];
   let mode = "meta";
   for (const line of lines) {
-    if (line === "quantities:") { mode = "quantities"; continue; }
-    if (line === "assumptions:") { mode = "assumptions"; continue; }
-    if (line === "exclusions:") { mode = "exclusions"; continue; }
-    if (line === "risks:") { mode = "risks"; continue; }
-    if (mode === "meta" && line.includes(":")) { const [k,...v] = line.split(":"); meta[k.trim().toLowerCase().replace(/ /g,"_")] = v.join(":").trim(); }
-    else if (mode === "quantities") {
-      if (line.startsWith("- description:")) quantities.push({ description: line.replace("- description:","").trim(), quantity: 0, unit: "" });
-      else if (line.startsWith("quantity:") && quantities.length) quantities[quantities.length-1].quantity = parseFloat(line.split(":")[1]) || 0;
-      else if (line.startsWith("unit:") && quantities.length) quantities[quantities.length-1].unit = line.split(":")[1].trim();
+    const t = line.trim();
+    if (t === "quantities:") { mode = "quantities"; continue; }
+    if (t === "assumptions:") { mode = "assumptions"; continue; }
+    if (t === "exclusions:") { mode = "exclusions"; continue; }
+    if (t === "risks:") { mode = "risks"; continue; }
+    if (mode === "meta" && t.includes(":")) {
+      const idx = t.indexOf(":");
+      const k = t.slice(0, idx).trim().toLowerCase().replace(/ /g,"_");
+      const v = t.slice(idx+1).trim().replace(/^["']|["']$/g,"");
+      if (k) meta[k] = v;
     }
-    else if (mode === "assumptions" && line.startsWith("-")) assumptions.push(line.replace(/^-\s*/,""));
-    else if (mode === "exclusions" && line.startsWith("-")) exclusions.push(line.replace(/^-\s*/,""));
-    else if (mode === "risks" && line.startsWith("-")) risks.push(line.replace(/^-\s*/,""));
+    else if (mode === "quantities") {
+      if (t.startsWith("- description:")) {
+        quantities.push({ description: t.replace("- description:","").trim().replace(/^["']|["']$/g,""), quantity: 0, unit: "" });
+      } else if ((t.startsWith("quantity:") || t.startsWith("  quantity:")) && quantities.length) {
+        quantities[quantities.length-1].quantity = parseFloat(t.split(":")[1]) || 0;
+      } else if ((t.startsWith("unit:") || t.startsWith("  unit:")) && quantities.length) {
+        quantities[quantities.length-1].unit = t.split(":")[1]?.trim().replace(/^["']|["']$/g,"") || "";
+      }
+    }
+    else if (mode === "assumptions" && t.startsWith("-")) assumptions.push(t.replace(/^-\s*/,"").replace(/^["']|["']$/g,""));
+    else if (mode === "exclusions" && t.startsWith("-")) exclusions.push(t.replace(/^-\s*/,"").replace(/^["']|["']$/g,""));
+    else if (mode === "risks" && t.startsWith("-")) risks.push(t.replace(/^-\s*/,"").replace(/^["']|["']$/g,""));
   }
   return { meta, quantities, assumptions, exclusions, risks };
 }
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // SAMPLE DATA
@@ -540,6 +552,8 @@ Extract all quantity items from the document. Where quantities are not explicitl
     } catch (err) {
       setExtractError("Could not read document: " + err.message);
       setDocxFileName("");
+      setExtracting(false);
+      return;
     }
     setExtracting(false);
   }
@@ -725,7 +739,7 @@ Extract all quantity items from the document. Where quantities are not explicitl
                 <span style={{ fontSize: 10, color: "#5a6070" }}>Include GST (15%)</span>
               </div>
             </div>
-            <button className="btn" onClick={runEstimate} disabled={running || extracting} style={{ background: "#1e2530", color: GOLD, padding: 14, fontSize: 10, letterSpacing: 4, border: `1px solid ${GOLD}`, opacity: (running || extracting) ? 0.5 : 1, cursor: (running || extracting) ? "not-allowed" : "pointer" }}>
+            <button className="btn" onClick={runEstimate} disabled={running} style={{ background: "#1e2530", color: GOLD, padding: 14, fontSize: 10, letterSpacing: 4, border: `1px solid ${GOLD}`, opacity: running ? 0.5 : 1, cursor: running ? "not-allowed" : "pointer" }}>
               {running ? "PROCESSING..." : "▶  RUN ESTIMATE"}
             </button>
           </div>
