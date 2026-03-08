@@ -195,7 +195,7 @@ function parseInput(raw) {
 // ════════════════════════════════════════════════════════════════════════════
 // SAMPLE DATA
 // ════════════════════════════════════════════════════════════════════════════
-const SAMPLE_INPUT = `project_name: 14 Pohutukawa Rise — New Residential Dwelling
+const SAMPLE_INPUT = `project_name: 14 Pohutukawa Rise - New Residential Dwelling
 project_type: Residential New Build
 location: Auckland
 floor_area_m2: 220
